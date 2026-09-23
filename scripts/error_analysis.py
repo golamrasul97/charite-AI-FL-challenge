@@ -46,10 +46,10 @@ from evaluator.evaluate import (  # noqa: E402  (path set up above)
     validate_spans,
 )
 
-# The single place that names the implementation under analysis. Phase 2 and 3
-# repoint these at src.deid / src.extraction; nothing else in this file changes.
-from src.baseline import detect_pii as _detect_pii  # noqa: E402
+# The single place that names the implementation under analysis. Phase 3
+# repoints extraction at src.extraction; nothing else in this file changes.
 from src.baseline import extract_clinical_data as _extract_clinical_data  # noqa: E402
+from src.deid import detect_pii as _detect_pii  # noqa: E402
 
 DATA_DIR = REPO_ROOT / "data"
 

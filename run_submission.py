@@ -12,7 +12,8 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from src.baseline import detect_pii, extract_clinical_data, render_deidentified
+from src.baseline import extract_clinical_data
+from src.deid import detect_pii, render_deidentified
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
