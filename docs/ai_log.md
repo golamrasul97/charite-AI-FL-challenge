@@ -159,3 +159,80 @@ already-pushed commit, so that the log grows session by session.
 
 **State at end of session.** Tests green, `make evaluate` unchanged at 31.84 / 40, `src/` untouched.
 Phase 2 not started.
+
+---
+
+## 2026-09-23 — Phase 2: de-identification
+
+**Task.** Replace the starter's `detect_pii` with `src/deid/`, robust to unseen formats.
+
+**What the assistant generated.**
+- `src/deid/patterns.py` — regexes and cue vocabularies, all counted from `train.jsonl`.
+- `src/deid/detector.py` — six layers: high-precision shapes (e-mail, phone, ID, date), context
+  labelling of dates, cue-based names, propagation, addresses, conflict resolution.
+- `src/deid/render.py` — the evaluator's rendering, kept separate so a test can assert equality.
+- `tests/test_deid.py` — 18 tests, including three hand-written notes in unseen formats.
+- `run_submission.py` and `scripts/error_analysis.py` repointed at `src.deid`. Extraction still
+  comes from `src/baseline.py`; that is Phase 3.
+
+**Evidence gathered before writing any code** (counted over the 120 training notes):
+- The corpus uses **six** templates, not three: Berlin clinical summary (34), Hyderabad EMR
+  snapshot (27), Chennai discharge note (24), federated node note (12), EMR export (8),
+  cross-silo record (15). The last three have no `Patient:`-style cue at all.
+- Every note contains **exactly one** of each label except `CLINICIAN_NAME` — 120 each, 181
+  clinician spans (59 notes with one occurrence, 61 with two).
+- The patient name string occurs exactly once per note (120/120), so propagating patient names
+  would add risk for no gain; the clinician name string occurs exactly as often as it is
+  labelled (1/1 or 2/2, never 2/1), so propagating clinician names is provably safe here.
+- Emails reconstruct the clinician name in 110/120 notes; the **10 failures are all German
+  transliteration** (`laura.koenig` → `Laura König`, `philipp.krueger` → `Philipp Krüger`), so the
+  propagation needs oe/ue/ae/ss folding.
+- All 120 patient and 181 clinician names are exactly two words; the only non-ASCII characters
+  are `ö` and `ü`.
+
+**Design decisions worth recording.**
+- *Priorities, not label precedence.* Each candidate span carries a priority reflecting how much
+  evidence it has (explicit cue > shape alone). Resolution sorts by priority, then length, then
+  position, so the output never depends on the order the layers ran in.
+- *Cues do the precision work, shapes do the recall work.* Shape patterns were widened past the
+  training data (ISO dates, `03 Jan 1971`, national phone numbers, generic `PREFIX-digits` IDs)
+  because the hidden set has new formats; precision is protected by requiring a cue for the
+  ambiguous cases rather than by keeping the shapes narrow.
+- *A title alone now marks a clinician* (`Dr. Sarah Klein reviewed the case`). No training note
+  needs this; it was added after an edge-case probe showed such a name would otherwise leak.
+- *Dates without a cue* fall back to: earliest date is the birth date, the rest are encounter
+  dates. This handles the `EMR EXPORT // id // date` header, where the header date is the visit.
+
+**Bug found and fixed during development.** The name pattern used `\s` between words, which
+matches newlines, so `Treating clinician: Deepa Naidu\nDx` parsed as a three-word name. Every
+clinician span was one token too long: 85 false positives *and* 85 false negatives, with character
+recall still 1.000. It cost 0.031 of the de-id score and would have been invisible without the
+per-label table from Phase 1. Fixed by using `[ \t]`; `_NAME_WORD` also requires lower-case letters
+so that an all-capitals banner can never parse as a name.
+
+**Verification.**
+- `make test` → **30 passed in 0.54 s** (12 previous + 18 new).
+- `make evaluate` → de-identification **1.0000** (was 0.7279); **35.92 / 40** (was 31.84).
+- `scripts/error_analysis.py --split train` → 1.0000, zero characters leaked, every label
+  120/120 (181/181 for clinicians), zero false positives.
+- Three hand-written unseen-format notes (UK letter with `d.o.b.`/`03 Jan 1971`/national phone,
+  ISO dates with a `LIS-88-01422` identifier, prose with slash separators): all expected spans
+  found and **zero spans beyond the hand-labelled set** — recall was not bought with precision.
+- Edge cases probed: empty note, whitespace-only, banner-only, `Patient:` with no name,
+  implausible date, bare `+49`, repeated text. No crashes, no out-of-bounds spans.
+- 26 ms for all 120 notes (0.22 ms/note); identical output across repeated runs.
+
+**Honest caveat.** 1.0000 on train *and* validation is a warning sign, not a victory: both splits
+draw on the same six templates, so the score mostly measures template coverage. The hand-written
+notes are the only evidence of generalisation, and they encode my own guess about what the hidden
+formats look like. Expect the test-set de-id score to be lower than 1.0; the report should say so
+rather than quoting 1.0000 as an expected result.
+
+**What Rasul changed or rejected.** Reviewed the layered design and the measured result and
+accepted both; nothing was rejected. Accepted the three hand-written unseen-format notes as a
+reasonable proxy for the hidden test set, and accepted the caveat stated above — that 1.0000 on
+train and validation measures template coverage rather than proven generalisation, so REPORT.md
+must present it that way instead of quoting 1.0000 as an expected test-set score.
+
+**State at end of session.** Tests green, 35.92 / 40, manifest OK. Extraction still on
+`src/baseline.py`. Phase 3 not started.
