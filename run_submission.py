@@ -12,7 +12,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 
-from src.baseline import extract_clinical_data
+from src.extraction import extract_clinical_data
 from src.deid import detect_pii, render_deidentified
 
 
