@@ -236,3 +236,89 @@ must present it that way instead of quoting 1.0000 as an expected test-set score
 
 **State at end of session.** Tests green, 35.92 / 40, manifest OK. Extraction still on
 `src/baseline.py`. Phase 3 not started.
+
+---
+
+## 2026-09-24 — Phase 3: structured extraction
+
+**Task.** Replace the starter's `extract_clinical_data` with `src/extraction/`, robust to unseen
+formats and to negated / family-history / considered-only mentions.
+
+**What the assistant generated.**
+- `src/extraction/lexicon.py` — surface forms for the 9 diagnoses and 16 medications; each concept
+  has case-insensitive terms and case-sensitive abbreviations (`AF`, `ASA`, `COAD`), all wrapped in
+  alphanumeric boundaries.
+- `src/extraction/negation.py` — clause-scoped NegEx-style rules: pre-cues, post-cues, family
+  cues, scope terminators ("but", "however").
+- `src/extraction/numeric.py` — HR, SBP, creatinine, Hb, LVEF with unit conversion and
+  plausibility guards.
+- `src/extraction/categorical.py` — smoking status and allergy.
+- `src/extraction/extractor.py` — orchestration; always returns all 9 keys.
+- `tests/test_extraction.py` — 116 tests.
+- `run_submission.py` and `scripts/error_analysis.py` now import `src.extraction`.
+  `src/baseline.py` is kept, per the brief.
+
+**Evidence gathered before writing any code** (train only): every phrase inside the diagnosis,
+medication, smoking, allergy, vitals and echo sections was enumerated and counted — 55 distinct
+diagnosis forms, 64 medication forms, 6 distractor sentences, 9 smoking phrases, 10 allergy
+phrases. The starter missed 132 of 225 diagnoses (recall 0.413) and every µmol/L creatinine and
+g/L haemoglobin value.
+
+**Design decisions worth recording.**
+- *No section dependence.* The brief suggested preferring active sections with a whole-note
+  fallback. Chosen instead: a whole-note scan with negation filtering only, because the six
+  templates already use six different section headers and a section-first design fails silently
+  on an unseen one. **Rasul should confirm this deviation.**
+- *Clause = sentence end, `;`, `|`, newline.* Colons are not boundaries, so "Family history: HTN"
+  still negates. Post-cues additionally stop at a comma, so in "HTN, T2DM, AF ruled out" only AF
+  is dropped.
+- *Considered-only is negation.* "suspected", "possible", "query" and a leading `?` drop a
+  diagnosis, following the DATA_DICTIONARY rule on considered-only concepts. This is a judgement
+  call: "suspected pneumonia" in a real admission note is often treated as the working diagnosis.
+- *Dataset conventions applied deliberately.* Bare "diabetes mellitus" maps to `type_2_diabetes`,
+  and phenprocoumon maps to `warfarin`. Both follow the training labels, although phenprocoumon is
+  pharmacologically a different drug.
+- *A missing unit is inferred from magnitude* (creatinine > 20 → µmol/L, Hb > 25 → g/L). This never
+  fires on train, where every value has a unit.
+- *German "RR" is not used for blood pressure*, because RR is also respiratory rate. The
+  hand-written German note therefore expects `systolic_bp_mmhg = null`.
+
+**Bugs found by the hand-written unseen-format notes** (none were visible on train or
+validation):
+1. Post-cues crossed commas: "PMH: HTN, T2DM, …, AF ruled out" dropped HTN and T2DM. Fixed by
+   `_post_scope`.
+2. `DM` had a lookahead that excluded any following "type", so "DM type 2" was missed.
+3. Bare German "Raucher" was a *current* cue, but it is usually a field label
+   ("Raucher: nein – Nichtraucher"). Removed.
+4. `finditer(note, 0, start)` treats `start` as end-of-string, so the `$` in the sentence-end
+   lookahead fired on any `?` or `.` directly before a mention ("?COPD"). The scan now covers the
+   whole note. The same fix was applied to the allergy sentence finder.
+5. "ibuprofen-associated urticaria" (train) had no allergy context word. Added standard reaction
+   words: urticaria, hives, angioedema, bronchospasm, rash.
+
+**Verification.**
+- `make test` → **146 passed in 0.81 s** (30 previous + 116 new).
+- `make evaluate` → extraction **1.0000** (was 0.8797); de-id 1.0000; readmission 0.7726
+  (unchanged); **37.73 / 40** (was 35.92).
+- `scripts/error_analysis.py --split train` → 1.0000: diagnoses 225/225, medications 287/287,
+  zero FP, every numeric field and both categorical fields fully correct.
+- `--split validation` → 1.0000. Validation was measured only; no pattern was added because of it.
+- Three hand-written unseen notes (UK letter with comma lists and British spelling, German
+  key-value export with mmol/L Hb, terse ward note with `?AF`, "suspected", "neg"): all fields
+  pass.
+- 92 ms for 120 notes; output identical across repeated runs. Manifest OK.
+
+**Honest caveat.** As in Phase 2, 1.0000 on train and validation measures template coverage. The
+evidence for generalisation is the three hand-written notes, and they found five bugs that the
+labelled data never exposed. Expect a lower hidden-test score. The report should quote the
+unseen-note results and the bug list, not 1.0000.
+
+**What Rasul changed or rejected.** Nothing rejected. Rasul reviewed the session, ran
+`scripts/error_analysis.py` himself to check the updated per-field results, and accepted:
+the whole-note scan instead of section-first extraction; "suspected"/"possible"/"?" as not active;
+the dataset mappings (diabetes mellitus → `type_2_diabetes`, phenprocoumon → `warfarin`); ignoring
+German "RR"; the three hand-written unseen-format notes and their labels; and the caveat that
+REPORT.md quotes the unseen-note results, not 1.0000.
+
+**State at end of session.** Tests green, 37.73 / 40, manifest OK. The readmission model is still
+the starter's (Phase 4 next).
