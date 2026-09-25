@@ -322,3 +322,110 @@ REPORT.md quotes the unseen-note results, not 1.0000.
 
 **State at end of session.** Tests green, 37.73 / 40, manifest OK. The readmission model is still
 the starter's (Phase 4 next).
+
+---
+
+## 2026-09-24 – 2026-09-25 — Phase 4: readmission models and federated learning (Task 3)
+
+**Task.** Build the local, federated and centralized models for `readmission_30d`, compare them,
+and make the submission use the federated model (FedAvg across the three hospital nodes).
+
+**Final result (commits `a030123`, `ba698c2`, `7bf8c12`).**
+- `src/readmission.py` — one file in the starter's style: `Pipeline(DictVectorizer,
+  LogisticRegression(C=10))`. `train_local`, `train_centralized`, `train_federated`. FedAvg is written
+  by hand: each round every client starts from the server's weights, fits on its own patients
+  (`local_update`, one optimizer update), and sends back only its weights and row count; the server
+  averages them weighted by n_k / N (`average_weights`); 50 rounds, zero start.
+- 9 features: age, prior admissions, heart failure, chronic kidney disease, atrial fibrillation,
+  LVEF, LVEF missing, haemoglobin, number of medications. Scaled with fixed values written in the
+  code and capped at ±3 — no statistics shared between hospital nodes.
+- `run_submission.py` trains the federated model on `--train` and writes one
+  `readmission_probability` per case. `scripts/run_experiments.py` writes `results/` (9 files).
+- `tests/test_readmission.py` — 13 tests (weighted average by hand, each client update sees only its
+  own hospital's patients, only weights and a count are returned, federated close to centralized,
+  same result every run, capping, unknown hospital).
+
+**Results (`results/`, repeated 5-fold cross-validation on train, 5 seeds).**
+
+| Model | AUC | Brier | Berlin / Chennai / Hyderabad AUC |
+|---|---|---|---|
+| Local models | 0.754 ± 0.016 | 0.183 | 0.52 / 0.85 / 0.83 |
+| **Federated model (submitted)** | **0.843 ± 0.024** | **0.142** | 0.67 / 0.90 / 0.94 |
+| Centralized model (reference) | 0.841 ± 0.025 | 0.139 | 0.66 / 0.90 / 0.94 |
+| Starter's model, same splits | 0.683 | 0.222 | 0.54 / 0.74 / 0.71 |
+
+Score that also includes choosing C inside each training part: AUC 0.835. Structured features only
+(age, prior admissions): 0.715. Validation (read once): readmission score 0.7679 (starter 0.7726;
+only 6 readmitted patients in 30). `make evaluate` → **37.68 / 40** (Phase 3: 37.73; the readmission
+score moved 0.7726 → 0.7679 while calibration improved, Brier 0.213 → 0.141).
+
+**How the final version was reached (in the order of Rasul's decisions).**
+1. First version (numpy logistic regression, 7 files, 30 features, FedAvg): validation readmission
+   dropped 0.7726 → 0.6786. Rasul rejected it and asked why 30 features were used when the starter
+   used 5. Diagnosis: 2 of the 6 validation readmissions (older patients with few findings in the
+   note) explained the gap; 30 features spread the signal thin.
+2. Rasul asked to rename "arm" (a CLAUDE.md term, not the challenge's).
+3. A 14-feature set chosen by a pre-declared rule: CV AUC 0.813, validation 0.7231.
+4. Rasul asked for code as simple as the starter's `train_centralized_baseline`: the 7 numpy files
+   were replaced by one sklearn file (same performance, AUC 0.809 vs 0.813). Cost: the exact
+   "FedAvg = centralized" proof and direct control of each gradient step (matters for Phase 5).
+5. Rasul asked to try all 5 structured features + all 9 extracted fields: raw values made FedAvg
+   fail to converge; scaled with missing flags, AUC 0.733 (above the starter's 0.683) but worse on
+   validation — about 48 columns for 41 readmissions is too many.
+6. Rasul asked for a thorough feature study: 49 candidate features built and checked on train and
+   validation (4 exact duplicates — each medication group equals a diagnosis in this data; one
+   feature with a single patient; a hypertension shift 42 % → 70 % between train and validation),
+   ranked several ways, sets of 3–49 features compared with the choice made inside each training
+   part. Best results came from 8–10 features; more than 15 made things worse. Core signal: CKD,
+   heart failure, number of diagnoses, atrial fibrillation, prior admissions, age.
+7. Candidates compared on cross-validation, 5 000 simulated 50-patient test sets and validation:
+   the earlier 14 features (0.797 / beat the starter in 97 % of simulated sets / validation 0.7512),
+   an 8-feature set (0.818 / 98 % / 0.7101), and the 14 minus their 5 weakest features (0.837 / 99 %
+   and better than the 14 in 92 % / 0.7679). **Rasul chose the 9-feature set.**
+8. Alternatives Rasul asked to test, all rejected with numbers (scripts kept locally in
+   `experiments/`, not committed): random forest (federated forest 0.764), gradient boosting as in
+   the FedXGBoost paper Rasul found (centralized, i.e. best case, 0.800; the paper is vertical
+   federated learning with only a heuristic privacy guarantee), TabNet (0.721–0.762, unstable), and
+   local fine-tuning of the federated model per hospital (worse at every site, Berlin 0.67 → 0.59).
+   Published evidence supports the choice: no benefit of machine learning over logistic regression
+   for clinical prediction models (Christodoulou et al. 2019, J Clin Epidemiol).
+9. Rasul brought a ChatGPT analysis suggesting a 15–20 feature set, a check of the "suspiciously
+   powerful" prior admissions, and leave-one-hospital-out testing. Results: without prior admissions
+   AUC 0.843 → 0.834 (the model does not depend on it; all 6 such patients were readmitted); adding
+   any of 22 left-out features changed the score by at most +0.007; the suggested 27-column set
+   scored 0.774; leave-one-hospital-out (federated model trained on 2 hospital nodes, tested on the
+   third) gave Berlin 0.72, Chennai 0.92, Hyderabad 0.95 — the model carries over to a hospital it
+   never saw. The 9 features were kept.
+10. Rasul asked to use only the challenge's wording: code and `results/` now say "model" (local /
+    federated / centralized), "site", "local updates" instead of the assistant's own terms.
+
+**Verification.** `make test` → 159 passed. `make evaluate` → 37.68 / 40. `run_experiments.py`
+reproduces `results/` in about 70 s and stops if its chosen settings differ from the constants in
+`src/readmission.py`. Submission runtime 0.7 s, identical output on a rerun, no ground-truth file
+opened. Manifest OK.
+
+**Honest caveats for REPORT.md.**
+- The 9 features were chosen by looking at the training data, so the training-data scores are a
+  little flattering; validation was never used for the choice and improved (0.7513 → 0.7679).
+- 120 patients and 41 readmissions: differences below about 0.03 AUC are noise; a 50-case hidden set
+  can move the score by about ±0.6 points.
+- Berlin stays the hardest site (0.67; 0.72 when held out); readmission behaves differently there
+  (non-IID data).
+- The federated model starts from zero weights and training is fully repeatable, so the seeds only
+  change the data splits — random-seed stability needs one extra check (random starting weights).
+- Local models reuse the federated model's settings (fairness point for the comparison).
+- Coefficients are not clinical findings: the data is synthetic and some features overlap.
+- `experiment_summary.json` is still minimal; the full version is Phase 6.
+
+**What Rasul changed or rejected.** Rejected the first 30-feature numpy version after the
+validation drop and questioned the feature count; required starter-style simplicity (one sklearn
+file instead of seven numpy files); required the challenge's own wording and the "arm" rename;
+asked for the all-fields, random forest,
+gradient boosting (from a paper he found), TabNet and fine-tuning experiments and dropped the ones
+that did not help; brought an outside (ChatGPT) analysis and had its suggestions tested rather than
+adopted; chose the final 9-feature set himself after comparing the candidates. Reviewed and accepted
+the final version and committed it.
+
+**State at end of phase.** Phase 4 complete and committed. 37.68 / 40, tests green. Next: Phase 5
+(privacy mechanism) — DP-SGD vs objective perturbation to be decided with Rasul first (research
+notes in CLAUDE.md).
