@@ -1,0 +1,7 @@
+setting,model,site,auc_mean,auc_sd,ap_mean,ap_sd,brier_mean,brier_sd,log_loss_mean,log_loss_sd
+local_updates=1,federated,overall,0.8427,0.024,0.7824,0.0273,0.1419,0.0101,0.4489,0.0305
+local_updates=1,centralized,overall,0.8411,0.0248,0.7805,0.0269,0.139,0.011,0.4482,0.0358
+local_updates=2,federated,overall,0.8422,0.0271,0.785,0.0324,0.1414,0.011,0.4481,0.0328
+local_updates=2,centralized,overall,0.8411,0.0248,0.7805,0.0269,0.139,0.011,0.4482,0.0358
+local_updates=5,federated,overall,0.834,0.0279,0.7768,0.0297,0.1454,0.0121,0.4608,0.0357
+local_updates=5,centralized,overall,0.8411,0.0248,0.7805,0.0269,0.139,0.011,0.4482,0.0358

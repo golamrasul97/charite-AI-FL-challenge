@@ -1,0 +1,73 @@
+{
+  "model": "sklearn Pipeline(DictVectorizer, LogisticRegression)",
+  "settings": {
+    "C": 10.0,
+    "rounds": 50,
+    "local_updates": 1,
+    "seed": 7
+  },
+  "selection_rule": "Lowest FedAvg CV log loss; settings within 0.002 of the best count as tied, and ties go to fewer rounds (less communication, smaller privacy cost), then to the smaller C (stronger regularisation).",
+  "grid": {
+    "C": [
+      1.0,
+      3.0,
+      10.0,
+      30.0,
+      100.0
+    ],
+    "rounds": [
+      20,
+      50,
+      100
+    ]
+  },
+  "settings_selection_check_picks": {
+    "C=1.0": 1,
+    "C=10.0": 14,
+    "C=3.0": 2,
+    "C=30.0": 8
+  },
+  "features": [
+    "age",
+    "atrial_fibrillation",
+    "chronic_kidney_disease",
+    "heart_failure",
+    "hemoglobin",
+    "lvef",
+    "lvef_missing",
+    "n_medications",
+    "prior_admissions_12m"
+  ],
+  "seeds": [
+    7,
+    19,
+    43,
+    101,
+    202
+  ],
+  "cv": "5-fold, stratified by hospital and label, repeated for each seed",
+  "communication": {
+    "values_per_message": 10,
+    "bytes_per_round": 480,
+    "total_bytes": 24000,
+    "hospital_to_server": "coef_ and intercept_ of the locally fitted model, and the row count n_k",
+    "server_to_hospital": "the averaged coef_ and intercept_",
+    "raw_rows_transferred": false
+  },
+  "train_size": {
+    "BERLIN_NODE": 42,
+    "CHENNAI_NODE": 39,
+    "HYDERABAD_NODE": 39
+  },
+  "train_prevalence": {
+    "BERLIN_NODE": 0.35714285714285715,
+    "CHENNAI_NODE": 0.4358974358974359,
+    "HYDERABAD_NODE": 0.23076923076923078
+  },
+  "runtime_seconds_per_cv_repeat": {
+    "local": 0.01768325020384509,
+    "federated": 0.558565875410568,
+    "centralized": 0.0064512250100960955
+  },
+  "total_runtime_seconds": 67.94463995799015
+}
