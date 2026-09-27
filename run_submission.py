@@ -12,7 +12,7 @@ from typing import Any
 
 import numpy as np
 
-from src import readmission
+from src import privacy, readmission
 from src.deid import detect_pii, render_deidentified
 from src.extraction import extract_clinical_data
 
@@ -78,13 +78,7 @@ def main() -> None:
     (args.artifacts_dir / "experiment_summary.json").write_text(
         json.dumps(experiment_summary, indent=2), encoding="utf-8"
     )
-    privacy_summary = {
-        "mechanism": None,
-        "threat_model": "TODO",
-        "privacy_guarantee": "TODO",
-        "utility_analysis": "TODO",
-        "limitations": "TODO",
-    }
+    privacy_summary = privacy.summary(train_records)  # Task 4, computed from --train only
     (args.artifacts_dir / "privacy_summary.json").write_text(
         json.dumps(privacy_summary, indent=2), encoding="utf-8"
     )
