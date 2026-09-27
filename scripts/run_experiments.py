@@ -16,6 +16,10 @@ Uses the models in ``src/readmission.py`` and writes (all committed):
   results/privacy_sweep.csv                private federated model: noise x clip x rounds -> epsilon, AUC, Brier, time
   results/leakage_demo.csv                 one patient's features recovered from an update, without and with noise
   results/privacy_validation.csv           non-private vs private federated model on validation
+  results/seed_stability.csv               federated model started from zeros vs 5 random starting points
+  results/leave_one_site_out.csv           federated model trained on 2 hospital nodes, tested on the third
+  results/prior_admissions_check.csv       the 9 features with and without prior admissions
+  results/model_family_comparison.csv      logistic regression vs random forest vs gradient boosting
 
 Protocol: 5-fold cross-validation on train, stratified by hospital and label,
 repeated with seeds 7, 19, 43, 101, 202; mean and standard deviation over the
@@ -33,12 +37,15 @@ from pathlib import Path
 from typing import Any, Callable
 
 import numpy as np
+from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
+from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import average_precision_score, brier_score_loss, log_loss, roc_auc_score
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src import privacy, readmission  # noqa: E402
+from src.experiment_summary import stratified_folds  # noqa: E402  (shared with run_submission)
 
 RESULTS = ROOT / "results"
 SEEDS = (7, 19, 43, 101, 202)
@@ -63,20 +70,6 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer.writeheader()
         for row in rows:
             writer.writerow({k: round(v, 4) if isinstance(v, float) else v for k, v in row.items()})
-
-
-def stratified_folds(hospitals: np.ndarray, y: np.ndarray, k: int, seed: int) -> np.ndarray:
-    """Fold number (0..k-1) per row, so every fold keeps each hospital's size and prevalence."""
-    rng = np.random.default_rng(seed)
-    fold = np.empty(len(y), dtype=int)
-    offset = 0
-    for hospital in sorted(set(hospitals.tolist())):
-        for label in (0, 1):
-            idx = np.flatnonzero((hospitals == hospital) & (y == label))
-            idx = idx[rng.permutation(len(idx))]
-            fold[idx] = (np.arange(len(idx)) + offset) % k
-            offset += len(idx)
-    return fold
 
 
 def metrics(y: np.ndarray, p: np.ndarray) -> dict[str, float]:
@@ -263,6 +256,94 @@ def settings_selection_check(data: Data, rounds: int) -> tuple[list[dict[str, An
 
 
 # --------------------------------------------------------------------------- #
+# Extra checks for the report: seeds, unseen sites, prior admissions, model family
+# --------------------------------------------------------------------------- #
+def federated_cv(data: Data, start_seed: int | None) -> tuple[list[dict[str, float]], np.ndarray]:
+    """Federated model under the usual folds, started from zeros or from random weights."""
+    per_repeat, last = [], np.zeros(len(data.y))
+    for seed in SEEDS:
+        fold = stratified_folds(data.hospitals, data.y, 5, seed)
+        p = np.zeros(len(data.y))
+        for f in range(5):
+            train, test = np.flatnonzero(fold != f), np.flatnonzero(fold == f)
+            model = readmission.fedavg(data.by_hospital(train), start_seed=start_seed)
+            p[test] = predict(model, data.rows(test)[0])
+        per_repeat.append(metrics(data.y, p)); last = p
+    return per_repeat, last
+
+
+def seed_stability_rows(data: Data) -> list[dict[str, Any]]:
+    rows, reference = [], None
+    for start in (None, *SEEDS):
+        per_repeat, p = federated_cv(data, start)
+        reference = p if start is None else reference
+        rows.append({"start": "zeros (submitted)" if start is None else f"random, seed {start}",
+                     **mean_sd(per_repeat), "max_probability_difference_vs_zero_start": float(np.abs(p - reference).max())})
+    return rows
+
+
+def leave_one_site_out_rows(train_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows = []
+    for name, keep in (("all 9 features", None), ("structured only (age, prior admissions)", STRUCTURED_ONLY)):
+        data = Data(train_records, keep)
+        for held_out in sorted(set(data.hospitals.tolist())):
+            train = np.flatnonzero(data.hospitals != held_out); test = np.flatnonzero(data.hospitals == held_out)
+            model = readmission.fedavg(data.by_hospital(train))
+            rows.append({"features": name, "trained_on": " + ".join(sorted(set(data.hospitals[train].tolist()))),
+                         "tested_on": held_out, **metrics(data.y[test], predict(model, data.rows(test)[0]))})
+    return rows
+
+
+def prior_admissions_rows(train_records: list[dict[str, Any]], rounds: int) -> list[dict[str, Any]]:
+    """Prior admissions look very strong (every training patient with one was readmitted)."""
+    nine = tuple(Data(train_records[:1]).x[0])
+    rows = []
+    for name, keep in (("all 9 features", None), ("9 without prior_admissions_12m", tuple(k for k in nine if k != "prior_admissions_12m"))):
+        rows += [r for r in model_rows(cross_validate(Data(train_records, keep), rounds), name) if r["site"] == "overall"]
+    return rows
+
+
+def model_family_rows(data: Data) -> list[dict[str, Any]]:
+    """Same folds and features. Random forest as local / federated forest (hospitals share their
+    forests, predictions averaged by n_k/N) / centralized; boosting centralized only, as a best case."""
+    vectorizer = DictVectorizer(sparse=False).fit(data.x[:1])
+    x_all = vectorizer.transform(data.x)
+    makers = {
+        "logistic regression": lambda: readmission.make_pipeline().named_steps["classifier"],
+        "random forest": lambda: RandomForestClassifier(n_estimators=300, min_samples_leaf=1, random_state=readmission.SEED, n_jobs=1),
+        "gradient boosting": lambda: HistGradientBoostingClassifier(max_depth=2, learning_rate=0.1, max_iter=50,
+                                                                    min_samples_leaf=5, l2_regularization=1.0,
+                                                                    random_state=readmission.SEED),
+    }
+    rows = []
+    for name, make in makers.items():
+        results: dict[str, list[dict[str, float]]] = {"local": [], "federated": [], "centralized": []}
+        for seed in SEEDS:
+            fold = stratified_folds(data.hospitals, data.y, 5, seed)
+            oof = {k: np.zeros(len(data.y)) for k in results}
+            for f in range(5):
+                train, test = np.flatnonzero(fold != f), np.flatnonzero(fold == f)
+                oof["centralized"][test] = make().fit(x_all[train], data.y[train]).predict_proba(x_all[test])[:, 1]
+                locals_ = {h: make().fit(x_all[train[data.hospitals[train] == h]], data.y[train[data.hospitals[train] == h]])
+                           for h in sorted(set(data.hospitals.tolist()))}
+                for h, m in locals_.items():
+                    t = test[data.hospitals[test] == h]
+                    oof["local"][t] = m.predict_proba(x_all[t])[:, 1]
+                if name == "logistic regression":
+                    oof["federated"][test] = predict(readmission.fedavg(data.by_hospital(train)), data.rows(test)[0])
+                elif name == "random forest":
+                    sizes = {h: int((data.hospitals[train] == h).sum()) for h in locals_}
+                    oof["federated"][test] = sum(m.predict_proba(x_all[test])[:, 1] * sizes[h] for h, m in locals_.items()) / len(train)
+            for k in results:
+                results[k].append(metrics(data.y, oof[k]))
+        for k, per_repeat in results.items():
+            if name == "gradient boosting" and k == "federated":
+                continue  # no federated boosting was built; centralized is its best case
+            rows.append({"model_family": name, "model": k, **mean_sd(per_repeat)})
+    return rows
+
+
+# --------------------------------------------------------------------------- #
 # Privacy mechanism (Task 4): differential privacy inside each hospital node
 # --------------------------------------------------------------------------- #
 NOISE_GRID = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0)
@@ -408,6 +489,11 @@ def main() -> None:
     write_csv(RESULTS / "feature_set_comparison.csv", comparison)
 
     write_csv(RESULTS / "model_comparison_validation.csv", validation_rows(train_records))
+
+    write_csv(RESULTS / "seed_stability.csv", seed_stability_rows(data))
+    write_csv(RESULTS / "leave_one_site_out.csv", leave_one_site_out_rows(train_records))
+    write_csv(RESULTS / "prior_admissions_check.csv", prior_admissions_rows(train_records, rounds))
+    write_csv(RESULTS / "model_family_comparison.csv", model_family_rows(data))
 
     # Task 4: privacy mechanism
     learning_rate, lr_rows = choose_learning_rate(data)

@@ -65,9 +65,9 @@
     "HYDERABAD_NODE": 0.23076923076923078
   },
   "runtime_seconds_per_cv_repeat": {
-    "local": 0.016995758394477888,
-    "federated": 0.5387033666134812,
-    "centralized": 0.006162367586512119
+    "local": 0.017830116796540098,
+    "federated": 0.5574874834157526,
+    "centralized": 0.006399933603825047
   },
-  "total_runtime_seconds": 68.46022295800503
+  "total_runtime_seconds": 100.82260008400772
 }
