@@ -13,6 +13,9 @@ Uses the models in ``src/readmission.py`` and writes (all committed):
   results/feature_set_comparison.csv       structured features only vs all 9 features
   results/convergence.csv                  test AUC and log loss of the federated model after each round
   results/federated_experiment.json        settings, features, communication payload, runtimes
+  results/privacy_sweep.csv                private federated model: noise x clip x rounds -> epsilon, AUC, Brier, time
+  results/leakage_demo.csv                 one patient's features recovered from an update, without and with noise
+  results/privacy_validation.csv           non-private vs private federated model on validation
 
 Protocol: 5-fold cross-validation on train, stratified by hospital and label,
 repeated with seeds 7, 19, 43, 101, 202; mean and standard deviation over the
@@ -35,7 +38,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, log_loss,
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src import readmission  # noqa: E402
+from src import privacy, readmission  # noqa: E402
 
 RESULTS = ROOT / "results"
 SEEDS = (7, 19, 43, 101, 202)
@@ -260,6 +263,84 @@ def settings_selection_check(data: Data, rounds: int) -> tuple[list[dict[str, An
 
 
 # --------------------------------------------------------------------------- #
+# Privacy mechanism (Task 4): differential privacy inside each hospital node
+# --------------------------------------------------------------------------- #
+NOISE_GRID = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0)
+CLIP_GRID = (0.5, 1.0)
+PRIVATE_ROUNDS_GRID = (20, 50)
+LEARNING_RATE_GRID = (0.5, 1.0, 2.0, 4.0)
+
+
+def private_cv(data: Data, clip: float, noise: float, rounds: int, learning_rate: float) -> dict[str, Any]:
+    """Same folds as cross_validate, private federated model; noise seeded per seed and fold."""
+    x_all = privacy.to_matrix(data.x)
+    scores, seconds = [], []
+    for seed in SEEDS:
+        fold = stratified_folds(data.hospitals, data.y, 5, seed)
+        p = np.zeros(len(data.y))
+        for f in range(5):
+            train, test = np.flatnonzero(fold != f), np.flatnonzero(fold == f)
+            hospital_data = {h: (x_all[train[data.hospitals[train] == h]], data.y[train[data.hospitals[train] == h]].astype(float))
+                             for h in sorted(set(data.hospitals.tolist()))}
+            start = time.perf_counter()
+            w = privacy.private_fedavg(hospital_data, seed=seed * 10 + f, clip=clip, noise=noise,
+                                       rounds=rounds, learning_rate=learning_rate)
+            seconds.append(time.perf_counter() - start)
+            p[test] = privacy.predict(w, x_all[test])
+        per_site = {"overall": metrics(data.y, p)}
+        for h in sorted(set(data.hospitals.tolist())):
+            per_site[h] = metrics(data.y[data.hospitals == h], p[data.hospitals == h])
+        scores.append(per_site)
+    return {"scores": scores, "seconds": float(np.mean(seconds))}
+
+
+def choose_learning_rate(data: Data) -> tuple[float, list[dict[str, Any]]]:
+    """Step size for the private model, chosen without noise (lowest CV log loss; ties -> smaller)."""
+    rows = []
+    for lr in LEARNING_RATE_GRID:
+        res = private_cv(data, clip=1e6, noise=0.0, rounds=max(PRIVATE_ROUNDS_GRID), learning_rate=lr)
+        rows.append({"learning_rate": lr, **mean_sd([r["overall"] for r in res["scores"]])})
+    best = min(r["log_loss_mean"] for r in rows)
+    return min(r["learning_rate"] for r in rows if r["log_loss_mean"] <= best + 0.002), rows
+
+
+def privacy_sweep(data: Data, learning_rate: float) -> list[dict[str, Any]]:
+    rows = []
+    for clip, noise, rounds in product(CLIP_GRID, NOISE_GRID, PRIVATE_ROUNDS_GRID):
+        res = private_cv(data, clip=clip, noise=noise, rounds=rounds, learning_rate=learning_rate)
+        row: dict[str, Any] = {"clip_C": clip, "noise_sigma": noise, "rounds_T": rounds,
+                               "epsilon": privacy.epsilon(noise, rounds), "delta": privacy.DELTA}
+        row.update(mean_sd([r["overall"] for r in res["scores"]]))
+        for h in sorted(set(data.hospitals.tolist())):
+            row[f"auc_{h}"] = float(np.mean([r[h]["auc"] for r in res["scores"]]))
+        row["seconds_per_training"] = res["seconds"]
+        rows.append(row)
+    return rows
+
+
+def choose_reference(rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Rule fixed before running: among noisy settings whose mean AUC minus one sd stays above the
+    starter's cross-validated AUC, take the smallest epsilon (ties -> higher AUC)."""
+    ok = [r for r in rows if r["noise_sigma"] > 0 and r["auc_mean"] - r["auc_sd"] > privacy.STARTER_CV_AUC]
+    return min(ok, key=lambda r: (r["epsilon"], -r["auc_mean"])) if ok else None
+
+
+def privacy_validation_rows(train_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    inputs = {r["case_id"]: r for r in read_jsonl(ROOT / "data" / "validation_inputs.jsonl")}
+    truth = read_jsonl(ROOT / "data" / "validation_ground_truth.jsonl")
+    records = [inputs[t["case_id"]] for t in truth]
+    y = np.asarray([int(t["readmission_30d"]) for t in truth])
+    x = privacy.to_matrix([readmission.feature_dict(r) for r in records])
+    non_private = predict(readmission.train_federated(train_records), [readmission.feature_dict(r) for r in records])
+    rows = [{"model": "federated (submitted, no noise)", "epsilon": float("inf"), **metrics(y, non_private)}]
+    for seed in SEEDS:
+        w = privacy.train_private_federated(train_records, seed=seed)
+        rows.append({"model": f"private federated (reference setting, noise seed {seed})",
+                     "epsilon": privacy.epsilon(privacy.NOISE, privacy.ROUNDS), **metrics(y, privacy.predict(w, x))})
+    return rows
+
+
+# --------------------------------------------------------------------------- #
 # Validation: train on all of train, score on validation (read only here)
 # --------------------------------------------------------------------------- #
 def validation_rows(train_records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -327,6 +408,25 @@ def main() -> None:
     write_csv(RESULTS / "feature_set_comparison.csv", comparison)
 
     write_csv(RESULTS / "model_comparison_validation.csv", validation_rows(train_records))
+
+    # Task 4: privacy mechanism
+    learning_rate, lr_rows = choose_learning_rate(data)
+    print(f"private model learning rate (chosen without noise): {learning_rate}")
+    if learning_rate != privacy.LEARNING_RATE:
+        raise SystemExit(f"chosen learning rate {learning_rate} differs from privacy.LEARNING_RATE; update src/privacy.py")
+    sweep = privacy_sweep(data, learning_rate)
+    write_csv(RESULTS / "privacy_sweep.csv", sweep)
+    reference = choose_reference(sweep)
+    if reference is None:
+        print("no noisy setting stays clearly above the starter; report the sweep as it is")
+    else:
+        print(f"reference setting: C={reference['clip_C']}, sigma={reference['noise_sigma']}, "
+              f"T={reference['rounds_T']}, epsilon={reference['epsilon']:.1f}, AUC={reference['auc_mean']:.3f}")
+        if (reference["clip_C"], reference["noise_sigma"], reference["rounds_T"]) != (privacy.CLIP, privacy.NOISE, privacy.ROUNDS):
+            raise SystemExit("the reference setting differs from CLIP / NOISE / ROUNDS in src/privacy.py; update them")
+    patient_x, patient_y = privacy.hospital_arrays(train_records)["BERLIN_NODE"]
+    write_csv(RESULTS / "leakage_demo.csv", privacy.leakage_demo(patient_x[0], patient_y[0], NOISE_GRID))
+    write_csv(RESULTS / "privacy_validation.csv", privacy_validation_rows(train_records))
 
     n_params = len(data.x[0]) + 1
     summary = {

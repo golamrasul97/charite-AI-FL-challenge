@@ -1,0 +1,7 @@
+model,epsilon,auc,ap,brier,log_loss
+"federated (submitted, no noise)",inf,0.8125,0.5964,0.1406,0.4365
+"private federated (reference setting, noise seed 7)",4.632,0.7014,0.6176,0.1427,0.5328
+"private federated (reference setting, noise seed 19)",4.632,0.7014,0.5258,0.1468,0.5451
+"private federated (reference setting, noise seed 43)",4.632,0.7014,0.5545,0.1868,0.5901
+"private federated (reference setting, noise seed 101)",4.632,0.75,0.6087,0.1618,0.4944
+"private federated (reference setting, noise seed 202)",4.632,0.8472,0.7524,0.1321,0.5228
