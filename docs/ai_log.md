@@ -429,3 +429,82 @@ the final version and committed it.
 **State at end of phase.** Phase 4 complete and committed. 37.68 / 40, tests green. Next: Phase 5
 (privacy mechanism) — DP-SGD vs objective perturbation to be decided with Rasul first (research
 notes in CLAUDE.md).
+
+---
+
+## 2026-09-25 – 2026-09-27 — Phase 5: privacy mechanism (Task 4)
+
+**Task.** Implement one privacy mechanism with a full threat model, and show the difference between
+federated learning and a formal privacy guarantee.
+
+**How the design was decided.** Rasul asked for no code until he understood the mechanism and the
+options. The assistant first compared the challenge's options (differential privacy, secure
+aggregation, homomorphic encryption); Rasul questioned why encryption would not fit, which led to a
+side-by-side comparison (encryption: no accuracy cost, but it only hides updates from the server, does
+not protect the released model, and with three hospitals two can expose the third; differential
+privacy: a formal per-patient claim with a number, at an accuracy cost). The mechanism was then
+explained step by step in plain words — what the 10 numbers per round are, one FedAvg round with a
+worked example, what differential privacy changes inside the hospital ("limit each patient's
+influence, add noise, then send"), the difference between the noise level σ (what we set) and ε
+(what we promise), and the exact privacy claim. After that the assistant proposed 10 decisions with
+recommendations; Rasul accepted all of them: differential privacy only; noise every round inside
+each hospital; the submission keeps the non-private federated model and the private model is the
+fully measured extension (the challenge allows "implement or rigorously prototype"); a leakage demo;
+an own accountant rather than a library call; one new file; a small grid of settings; a rule fixed
+in advance for the reference ε; a compact scope because of the deadline.
+
+**What the assistant generated (commits `e809565`, `69944a1`, `2959fca`).**
+- `src/privacy.py` — private local update (each patient's gradient → clipped to length C → summed →
+  Gaussian noise with standard deviation σ·C → one step, divided by the public patient count; only
+  the noisy weights and the count leave the client), private FedAvg (same n_k / N averaging, seeded
+  noise), privacy accountant (Rényi DP of the Gaussian mechanism, α/(2σ²) per round over T rounds,
+  best α; no sampling amplification claimed), leakage demo, and `summary()` for
+  `privacy_summary.json`. Same 9 features as the submitted model.
+- `tests/test_privacy.py` — 27 checks: clipping bound; no noise and no clipping equals a plain gradient
+  step; only weights and a count are returned; noise is repeatable per seed; ε matches the reference
+  values for T = 40 (50.3 / 20.2 / 8.8 / 4.1) and is never below the closed-form bound; ε shrinks with
+  noise and grows with rounds; exact recovery without noise; the summary has every required item.
+- `scripts/run_experiments.py` — learning rate chosen without noise, sweep σ ∈ {0, 0.5, 1, 2, 4, 8}
+  × C ∈ {0.5, 1} × T ∈ {20, 50} on the same 25 data splits, reference rule, leakage demo, one
+  validation check → `results/privacy_sweep.csv`, `leakage_demo.csv`, `privacy_validation.csv`.
+- `run_submission.py` — writes the full `privacy_summary.json` from `--train` only.
+
+**Results.**
+- Leakage demo (one real Berlin patient): without noise the patient's features are recovered exactly
+  from a one-patient update (similarity 1.000); similarity 0.39 at σ = 0.5, 0.13 at σ = 1, about 0
+  from σ = 2. Federated learning alone is not a privacy guarantee.
+- Learning rate 4.0 (chosen without noise): the no-noise private training matches the submitted
+  sklearn federated model (log loss 0.449 both).
+- Privacy/accuracy trade-off (mean CV AUC): no noise 0.839; ε ≈ 23 → 0.821; ε ≈ 10 → 0.800;
+  **ε ≈ 4.6 → 0.734 ± 0.037** (starter under the same CV: 0.683). Noise costs almost no time
+  (about 1.5 ms per training).
+- Reference setting by the rule fixed before running (smallest ε whose mean AUC minus one standard
+  deviation stays above 0.683): C = 0.5, σ = 8, T = 50, δ = 1e-5, **ε ≈ 4.6**.
+- Privacy claim: "(4.6, 1e-5)-differential privacy with respect to adding or removing one patient at a
+  single hospital, for all updates that hospital sends and therefore also for the final private
+  model." Not guaranteed: which hospitals take part and site-level patterns; Tasks 1–2 on raw notes;
+  malicious clients or poisoning; side channels; the submitted non-private model.
+- Validation (read once): private model AUC 0.70–0.85 across 5 noise draws; submitted model 0.81.
+
+**Verification.** `make test` → 186 passed. `make evaluate` → 37.68 / 40 (unchanged; the submitted
+predictions still come from the non-private federated model). Submission runtime about 1 s;
+predictions identical between runs; the only difference between runs is the measured seconds in the
+summaries. No ground-truth file opened by the submission. Manifest OK.
+
+**Honest caveats for REPORT.md.**
+- The reference setting was chosen on training-data cross-validation; ε is a worst-case bound.
+- About 40 patients per hospital means large noise: strong privacy (ε ≈ 4.6) costs about 0.1 AUC.
+- With 30 validation patients the private model's score depends noticeably on the noise draw.
+- The server still sees each hospital's own noisy update; secure aggregation or homomorphic
+  encryption would hide it too (not implemented, complementary).
+- The submitted predictions are not covered by the privacy claim; this is stated in
+  `privacy_summary.json`.
+
+**What Rasul changed or rejected.** Required a plain-words explanation and a joint decision before any
+code, and paused several times to ask for simpler explanations (the 10 numbers, one FedAvg round, the
+effect of noise, σ versus ε) until he understood each step; questioned the recommendation against
+homomorphic encryption and had it compared fairly before choosing differential privacy; then accepted
+the 10 proposed decisions, reviewed the result and committed it. Nothing was rejected.
+
+**State at end of phase.** Phase 5 complete and committed. 186 tests, 37.68 / 40. Next: Phase 6
+(full `experiment_summary.json`, Docker, README, REPORT, AI_USAGE).
