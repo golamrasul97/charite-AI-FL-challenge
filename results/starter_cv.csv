@@ -1,0 +1,5 @@
+model,site,auc_mean,auc_sd,ap_mean,ap_sd,brier_mean,brier_sd,log_loss_mean,log_loss_sd
+"starter (centralized, class_weight=balanced)",overall,0.6834,0.0151,0.5436,0.0234,0.2222,0.0055,0.631,0.0144
+"starter (centralized, class_weight=balanced)",BERLIN_NODE,0.5388,0.0262,0.428,0.0309,0.2737,0.0056,0.7492,0.0126
+"starter (centralized, class_weight=balanced)",CHENNAI_NODE,0.7444,0.0207,0.7203,0.0267,0.2086,0.0096,0.5958,0.0259
+"starter (centralized, class_weight=balanced)",HYDERABAD_NODE,0.7141,0.023,0.4142,0.013,0.1802,0.0073,0.539,0.0206

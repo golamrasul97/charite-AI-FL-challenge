@@ -20,6 +20,7 @@ Uses the models in ``src/readmission.py`` and writes (all committed):
   results/leave_one_site_out.csv           federated model trained on 2 hospital nodes, tested on the third
   results/prior_admissions_check.csv       the 9 features with and without prior admissions
   results/model_family_comparison.csv      logistic regression vs random forest vs gradient boosting
+  results/starter_cv.csv                   the starter's model (5 structured fields + hospital) under the same folds
 
 Protocol: 5-fold cross-validation on train, stratified by hospital and label,
 repeated with seeds 7, 19, 43, 101, 202; mean and standard deviation over the
@@ -303,6 +304,29 @@ def prior_admissions_rows(train_records: list[dict[str, Any]], rounds: int) -> l
     return rows
 
 
+def starter_rows(train_records: list[dict[str, Any]], data: Data) -> list[dict[str, Any]]:
+    """The starter's model exactly as supplied (src/baseline.py era run_submission.py): structured
+    fields + hospital_id, LogisticRegression(class_weight="balanced"), same folds as everything else."""
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.pipeline import Pipeline
+
+    rows_x = [{**r["structured_features"], "hospital_id": r["hospital_id"]} for r in train_records]
+    per_repeat = []
+    for seed in SEEDS:
+        fold = stratified_folds(data.hospitals, data.y, 5, seed)
+        p = np.zeros(len(data.y))
+        for f in range(5):
+            train, test = np.flatnonzero(fold != f), np.flatnonzero(fold == f)
+            model = Pipeline([("vectorizer", DictVectorizer(sparse=False)),
+                              ("classifier", LogisticRegression(max_iter=1000, class_weight="balanced", random_state=7))])
+            model.fit([rows_x[i] for i in train], data.y[train])
+            p[test] = model.predict_proba([rows_x[i] for i in test])[:, 1]
+        per_repeat.append({"overall": metrics(data.y, p),
+                           **{h: metrics(data.y[data.hospitals == h], p[data.hospitals == h]) for h in sorted(set(data.hospitals.tolist()))}})
+    return [{"model": "starter (centralized, class_weight=balanced)", "site": site, **mean_sd([r[site] for r in per_repeat])}
+            for site in per_repeat[0]]
+
+
 def model_family_rows(data: Data) -> list[dict[str, Any]]:
     """Same folds and features. Random forest as local / federated forest (hospitals share their
     forests, predictions averaged by n_k/N) / centralized; boosting centralized only, as a best case."""
@@ -494,6 +518,10 @@ def main() -> None:
     write_csv(RESULTS / "leave_one_site_out.csv", leave_one_site_out_rows(train_records))
     write_csv(RESULTS / "prior_admissions_check.csv", prior_admissions_rows(train_records, rounds))
     write_csv(RESULTS / "model_family_comparison.csv", model_family_rows(data))
+    starter = starter_rows(train_records, data)
+    write_csv(RESULTS / "starter_cv.csv", starter)
+    if abs(starter[0]["auc_mean"] - privacy.STARTER_CV_AUC) > 0.0005:
+        raise SystemExit(f"starter CV AUC {starter[0]['auc_mean']:.4f} differs from privacy.STARTER_CV_AUC; update it")
 
     # Task 4: privacy mechanism
     learning_rate, lr_rows = choose_learning_rate(data)
