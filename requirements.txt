@@ -1,3 +1,18 @@
-numpy>=2.0,<3
-scikit-learn>=1.5,<2
-pytest>=8,<10
+# Exact versions, chosen to install on Python 3.11, 3.12 and 3.13 (Linux x86_64/aarch64 and macOS arm64).
+# Runtime
+numpy==2.4.6
+scikit-learn==1.9.1
+scipy==1.17.1
+joblib==1.6.0
+threadpoolctl==3.7.0
+# Tests (pytest; jsonschema checks outputs against schemas/prediction.schema.json)
+pytest==9.1.1
+iniconfig==2.3.0
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+jsonschema==4.26.0
+jsonschema-specifications==2025.9.1
+referencing==0.37.0
+rpds-py==2026.6.3
+attrs==26.1.0

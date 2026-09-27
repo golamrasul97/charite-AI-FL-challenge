@@ -1,0 +1,13 @@
+# Keep the image small and free of local-only files.
+.git
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.DS_Store
+outputs
+experiments
+CLAUDE.md
+.claude
+.idea
+.vscode
