@@ -159,19 +159,25 @@ def fedavg(
     rounds: int = ROUNDS,
     local_updates: int = LOCAL_UPDATES,
     on_round: Any = None,
+    start_seed: int | None = None,
 ) -> Pipeline:
     """FedAvg over ``{hospital: (x_train, y_train)}``; returns the shared Pipeline.
 
-    The shared model starts at zero weights. Its column order comes from the
-    feature names alone (``feature_dict`` always returns the same 9 keys), not
-    from any hospital's data. ``on_round(r, model)`` lets the experiments record
-    a convergence curve.
+    The shared model starts at zero weights, or at small random weights drawn with
+    ``start_seed`` (used only to check random-seed stability). Its column order
+    comes from the feature names alone (``feature_dict`` always returns the same
+    9 keys), not from any hospital's data. ``on_round(r, model)`` lets the
+    experiments record a convergence curve.
     """
     some_x = next(iter(hospital_data.values()))[0]
     global_model = make_pipeline()
     global_model.named_steps["vectorizer"].fit([dict.fromkeys(some_x[0], 0.0)])
     n_features = len(global_model.named_steps["vectorizer"].feature_names_)
-    set_weights(global_model, np.zeros((1, n_features)), np.zeros(1))
+    if start_seed is None:
+        set_weights(global_model, np.zeros((1, n_features)), np.zeros(1))
+    else:
+        start = np.random.default_rng(start_seed).normal(0.0, 0.1, size=n_features + 1)
+        set_weights(global_model, start[None, :-1], start[-1:])
     for round_number in range(1, rounds + 1):
         updates = [local_update(global_model, x, y, local_updates) for x, y in hospital_data.values()]
         set_weights(global_model, *average_weights(updates))
