@@ -104,7 +104,7 @@ hand-written notes in unseen formats produced **no span beyond the hand-labelled
 | De-identification score | 0.7279 | 1.0000 | **1.0000** |
 | Character recall (1 − leakage) | 0.543 | 1.000 | 1.000 |
 | `PATIENT_NAME` / `ADDRESS` / `CLINICIAN_NAME` found | 0 / 0 / 0 of 30 / 30 / 45 | all | all |
-| False positives | — | 0 | 0 |
+| False positives | 0 | 0 | 0 |
 
 **Error analysis (concrete cases).**
 
@@ -166,8 +166,9 @@ g/L ÷ 10 and mmol/L → g/dL; decimal commas (`1,04`); LVEF ranges (`35-40 %` �
 `BP 110/61` and `140 over 86`. Values outside plausible ranges are discarded and logged. A value that
 is not documented ("ejection fraction not documented", "vital signs not captured") is `null`, never 0.
 
-**Validation results.** Extraction score **1.0000** on validation (starter 0.8797) and on training:
-diagnoses 52/52, medications 59/59, all numeric fields within tolerance, smoking and allergy 30/30.
+**Validation results.** Extraction score **1.0000** on validation (starter 0.8797) and on training.
+On validation: diagnoses 52/52, medications 59/59, all numeric fields within tolerance, smoking and
+allergy 30/30.
 The starter found only 52 % of validation diagnoses and missed every creatinine in µmol/L and every
 haemoglobin in g/L.
 
@@ -223,7 +224,7 @@ Repeating that choice inside every training fold gives AUC **0.835 ± 0.036**, t
 
 | Model | ROC AUC | Average precision | Brier | Berlin AUC | Chennai AUC | Hyderabad AUC |
 |---|---|---|---|---|---|---|
-| Starter's model (structured + hospital, balanced) | 0.683 ± 0.023 | — | 0.222 | 0.539 | 0.744 | 0.714 |
+| Starter's model (structured + hospital, balanced) | 0.683 ± 0.015 | 0.544 | 0.222 | 0.539 | 0.744 | 0.714 |
 | Local models | 0.754 ± 0.016 | 0.675 | 0.182 | 0.523 | 0.850 | 0.833 |
 | **Federated model** | **0.843 ± 0.024** | **0.782** | **0.142** | **0.670** | **0.897** | **0.939** |
 | Centralized model (reference) | 0.841 ± 0.025 | 0.780 | 0.139 | 0.659 | 0.896 | 0.942 |
@@ -339,7 +340,8 @@ single hospital, for all updates that hospital sends and therefore for the final
 | **σ = 8, C = 0.5 (reference)** | **4.6** | **0.734 ± 0.037** | **0.209** |
 
 With noise the recovered features become useless (similarity 0.39 at σ = 0.5, 0.13 at σ = 1, about 0
-from σ = 2). Noise adds almost no computing time; the cost is accuracy. On validation the private
+from σ = 2). Noise adds almost no computing time (about 0.002 s per training with or without noise); the cost is
+accuracy. On validation the private
 model reaches AUC 0.70–0.85 depending on the noise draw (the submitted model: 0.81), which shows how
 much noise moves a 30-case result. The submitted predictions come from the non-private federated
 model; the private model is fully implemented, tested and measured, as the challenge allows
@@ -427,7 +429,7 @@ summary cannot be computed, the file records the error instead of stopping the r
 - The federated training is simulated in one process, without networking, authentication or clients
   dropping out.
 
-**Next steps.** TODO(Rasul): confirm or reorder these by what matters most to you.
+**Next steps.**
 
 1. A small statistical name recogniser as a second check behind the rules, validated on harder
    synthetic notes.
