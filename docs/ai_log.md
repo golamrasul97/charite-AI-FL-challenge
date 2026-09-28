@@ -508,3 +508,82 @@ the 10 proposed decisions, reviewed the result and committed it. Nothing was rej
 
 **State at end of phase.** Phase 5 complete and committed. 186 tests, 37.68 / 40. Next: Phase 6
 (full `experiment_summary.json`, Docker, README, REPORT, AI_USAGE).
+
+---
+
+## 2026-09-27 – 2026-09-28 — Phase 6: packaging, Docker and write-up
+
+**Task.** Make the submission complete and robust (full summaries, safe handling of failing cases,
+end-to-end tests, pinned requirements, Docker), and write README.md, REPORT.md and AI_USAGE.md.
+
+**Rasul's decisions before starting.** Keep the starter's code in the repository (`src/baseline.py`,
+unused by the submission); compute both summaries from `--train` at every run instead of copying
+numbers from files; pin every dependency so that it installs on Python 3.11–3.13 ("take no risk from
+the reviewer's side"); keep the Docker base `python:3.11-slim`.
+
+**What the assistant generated.**
+- *Part A, submission (commits `3912282`, `da6125b`, `d32d9c8`).* `src/experiment_summary.py` writes
+  the full `experiment_summary.json` from `--train` (local, federated and centralized metrics overall
+  and per site, settings, communication, convergence, non-IID observations, limitations).
+  `run_submission.py` keeps going when one case fails: failed de-identification redacts the whole
+  note, failed extraction leaves the fields empty, failed prediction uses the training readmission
+  rate, invalid JSON lines are skipped; each is logged. `tests/test_submission.py` (7 tests): every
+  output line checked against `schemas/prediction.schema.json` with `jsonschema`, both summaries
+  complete, the submission never opens a file with "ground_truth" in its name, failure handling.
+  New results: `seed_stability.csv`, `leave_one_site_out.csv`, `prior_admissions_check.csv`,
+  `model_family_comparison.csv`, `starter_cv.csv` (the starter's model under the same
+  cross-validation).
+- *Part B, environment (commit `d2456ef`).* `requirements.txt` pinned exactly (numpy 2.4.6, scipy
+  1.17.1, scikit-learn 1.9.1, …; numpy 2.5.3 has no Python 3.11 build). `.dockerignore` keeps `.git`,
+  `.venv`, `outputs/`, `experiments/` and local notes out of the image.
+- *Part C, documents (commits `87e01ff`, `ba8a941`, `3e44886`, `c8d2afb`, `8d5d6a3`, and the
+  AI_USAGE commit).* README with setup, usage, results and an overview figure (`docs/overview.svg`);
+  REPORT.md following the 8 sections of `REPORT_TEMPLATE.md`; a separate architecture figure for the
+  report (`docs/architecture.svg`); AI_USAGE.md built from this log.
+
+**Finding reported, not fixed.** Performance is stable across starting weights (CV AUC 0.842–0.845),
+but single probabilities can differ by up to 0.28 between random starts, because one L-BFGS update
+per round does not settle exactly. The submission always starts from zeros, so it is repeatable.
+Stated in REPORT.md §5 and §8.
+
+**Review of the documents (2026-09-28), and what it changed.**
+- *Architecture figure.* Rasul asked whether the README poster fits REPORT §2. Assessment: no. Half
+  of it is scores; it shows privacy noise as a step in every hospital although the submitted model
+  has none; it does not show what crosses the hospital boundary; it hides that the hospitals are
+  simulated. A new figure was drawn (training inside each hospital → only w_k and n_k to the FedAvg
+  server → averaged w back, 50 rounds; prediction for each input case; the private variant as a
+  dashed extension). Rasul chose to state "simulated in one process" in the report text rather than
+  in the figure. He then found the privacy panel noisy and unclear; it was simplified to four steps
+  and one result line.
+- *Report check against the template and the challenge README.* Every required topic was covered;
+  numbers were traced to `results/`. Found and fixed: the starter's AUC spread (± 0.023 → ± 0.015,
+  `starter_cv.csv`), an ambiguous sentence about extraction counts (they are validation counts), and
+  three gaps filled with measured values (starter AP 0.544, starter false positives 0, noise cost
+  about 0.002 s per training). Rasul asked whether the listed next steps had to be built; they are
+  text the template requires, so only the TODO marker was removed.
+- *README figure.* Rasul asked for a review without changes first. Four problems found and fixed at
+  his choice: the privacy step shown as part of the submitted pipeline; the readmission card mixing
+  training cross-validation with the validation scores of the other cards (now tagged "train CV",
+  with the validation result 0.768 vs 0.773 in the caption); outputs drawn as coming from the server;
+  no label for what is exchanged. Rasul declined a larger privacy strip in the figure, because the
+  README's privacy section already tells that story.
+- *AI_USAGE.md.* Drafted from this log; Rasul filled in the ChatGPT version (GPT-6 Astra,
+  25 Sep 2026), which was checked against OpenAI's published model list.
+
+**Verification (2026-09-28).** `make test` → **193 passed**. `make evaluate` → de-identification
+1.0000, extraction 1.0000, readmission 0.7679, **37.68 / 40** (unchanged). Manifest OK. Docker
+(measured 2026-09-27): image 634 MB, Python 3.11.16, 193 tests pass inside it offline; the standard
+command with `--network none --cpus 4 --memory 16g` runs in 8.4 s; de-identification and extraction
+identical to the macOS run, probabilities within 2 × 10⁻¹⁵. Figures rendered and checked for
+overlapping text.
+
+**What Rasul changed or rejected.** Set the four decisions above before any code. Rejected reusing
+the README poster as the report's architecture figure, and had the new figure's privacy panel
+simplified. Chose which README-figure fixes to apply and declined one. Asked for the report to be
+checked against the requirements before submitting. Did not amend the already-pushed report commit
+after advice that a follow-up commit is the normal history. Made every commit and push himself; when
+pushing failed, the assistant only diagnosed the network (SSH port 22 blocked, port 443 open) and
+Rasul applied GitHub's port-443 SSH setting himself.
+
+**State at end of phase.** Phase 6 complete. 193 tests, 37.68 / 40. Next: Phase 7 (fresh-clone test,
+offline Docker run from the clone, final consistency check, commit hash, submission email).
