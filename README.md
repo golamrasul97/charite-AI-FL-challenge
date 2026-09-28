@@ -1,7 +1,7 @@
 # Privacy-Preserving Clinical AI across Three Hospital Nodes
 
 <p align="center">
-  <img src="docs/overview.svg" alt="Scores against the starter (37.68 of 40 automated points, de-identification and extraction 1.00, readmission AUC 0.84 vs 0.68) and how it works: three hospital nodes de-identify, extract and train locally; only weights and patient counts go to a FedAvg server." width="100%">
+  <img src="docs/overview.svg" alt="Scores against the starter (37.68 of 40 automated points, de-identification and extraction 1.00, readmission AUC 0.84 vs 0.68 in training cross-validation, on par with the starter on validation) and how it works: three hospital nodes de-identify, extract and train locally; only weights and patient counts go to a FedAvg server." width="100%">
 </p>
 
 Solution to the take-home challenge described in [`docs/CHALLENGE_README.md`](docs/CHALLENGE_README.md).
