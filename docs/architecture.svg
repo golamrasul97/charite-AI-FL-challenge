@@ -1,0 +1,158 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="836" viewBox="0 0 960 836" font-family="Inter, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>System architecture: three hospitals train a readmission model with FedAvg and share only model weights; the final federated model then scores every input case</title>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-small" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#8b5cf6"/>
+    </marker>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="125%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <symbol id="lock" viewBox="0 0 12 14">
+      <path d="M3 6 V4 a3 3 0 0 1 6 0 V6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      <rect x="1" y="6" width="10" height="7.5" rx="1.6" fill="currentColor"/>
+    </symbol>
+  </defs>
+
+  <rect x="1" y="1" width="958" height="834" rx="18" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- ============ header ============ -->
+  <text x="40" y="46" font-size="22" font-weight="700" fill="#0f172a">System architecture</text>
+  <text x="40" y="70" font-size="13" fill="#475569">Hospitals train together with FedAvg and share only model weights; the final federated model then scores every --input case.</text>
+
+  <!-- ============ 1. training ============ -->
+  <text x="40" y="108" font-size="15" font-weight="700" fill="#0f172a">1  Training: --train split by hospital_id</text>
+  <use href="#lock" x="597" y="97" width="11" height="13" color="#475569"/>
+  <text x="920" y="108" font-size="12" fill="#475569" text-anchor="end">patient rows, features and labels stay inside each hospital</text>
+
+  <g transform="translate(40,122)" color="#1d4ed8">
+    <rect width="272" height="204" rx="14" fill="#eff6ff" stroke="#3b82f6" stroke-width="2" stroke-dasharray="7 5"/>
+    <use href="#lock" x="18" y="16" width="12" height="14"/>
+    <text x="38" y="28" font-size="14" font-weight="700" fill="#1e3a8a">BERLIN_NODE</text>
+    <text x="256" y="28" font-size="12" fill="#475569" text-anchor="end">n = 42</text>
+    <g font-size="12" fill="#1f2937" text-anchor="middle">
+      <rect x="16" y="44" width="240" height="26" rx="13" fill="#fff" stroke="#bfdbfe"/><text x="136" y="61.5">own training rows + labels</text>
+      <rect x="16" y="84" width="240" height="26" rx="13" fill="#fff" stroke="#bfdbfe"/><text x="136" y="101.5">Extract clinical data</text>
+      <rect x="16" y="124" width="240" height="26" rx="13" fill="#fff" stroke="#bfdbfe"/><text x="136" y="141.5">9 features (fixed public scaling)</text>
+      <rect x="16" y="164" width="240" height="26" rx="13" fill="#dbeafe" stroke="#3b82f6"/><text x="136" y="181.5" font-weight="600">Local update (LogisticRegression)</text>
+    </g>
+    <g stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-small)">
+      <path d="M136 71 V82"/><path d="M136 111 V122"/><path d="M136 151 V162"/>
+    </g>
+  </g>
+
+  <g transform="translate(344,122)" color="#047857">
+    <rect width="272" height="204" rx="14" fill="#ecfdf5" stroke="#10b981" stroke-width="2" stroke-dasharray="7 5"/>
+    <use href="#lock" x="18" y="16" width="12" height="14"/>
+    <text x="38" y="28" font-size="14" font-weight="700" fill="#064e3b">CHENNAI_NODE</text>
+    <text x="256" y="28" font-size="12" fill="#475569" text-anchor="end">n = 39</text>
+    <g font-size="12" fill="#1f2937" text-anchor="middle">
+      <rect x="16" y="44" width="240" height="26" rx="13" fill="#fff" stroke="#a7f3d0"/><text x="136" y="61.5">own training rows + labels</text>
+      <rect x="16" y="84" width="240" height="26" rx="13" fill="#fff" stroke="#a7f3d0"/><text x="136" y="101.5">Extract clinical data</text>
+      <rect x="16" y="124" width="240" height="26" rx="13" fill="#fff" stroke="#a7f3d0"/><text x="136" y="141.5">9 features (fixed public scaling)</text>
+      <rect x="16" y="164" width="240" height="26" rx="13" fill="#d1fae5" stroke="#10b981"/><text x="136" y="181.5" font-weight="600">Local update (LogisticRegression)</text>
+    </g>
+    <g stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-small)">
+      <path d="M136 71 V82"/><path d="M136 111 V122"/><path d="M136 151 V162"/>
+    </g>
+  </g>
+
+  <g transform="translate(648,122)" color="#b45309">
+    <rect width="272" height="204" rx="14" fill="#fffbeb" stroke="#f59e0b" stroke-width="2" stroke-dasharray="7 5"/>
+    <use href="#lock" x="18" y="16" width="12" height="14"/>
+    <text x="38" y="28" font-size="14" font-weight="700" fill="#78350f">HYDERABAD_NODE</text>
+    <text x="256" y="28" font-size="12" fill="#475569" text-anchor="end">n = 39</text>
+    <g font-size="12" fill="#1f2937" text-anchor="middle">
+      <rect x="16" y="44" width="240" height="26" rx="13" fill="#fff" stroke="#fde68a"/><text x="136" y="61.5">own training rows + labels</text>
+      <rect x="16" y="84" width="240" height="26" rx="13" fill="#fff" stroke="#fde68a"/><text x="136" y="101.5">Extract clinical data</text>
+      <rect x="16" y="124" width="240" height="26" rx="13" fill="#fff" stroke="#fde68a"/><text x="136" y="141.5">9 features (fixed public scaling)</text>
+      <rect x="16" y="164" width="240" height="26" rx="13" fill="#fef3c7" stroke="#f59e0b"/><text x="136" y="181.5" font-weight="600">Local update (LogisticRegression)</text>
+    </g>
+    <g stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-small)">
+      <path d="M136 71 V82"/><path d="M136 111 V122"/><path d="M136 151 V162"/>
+    </g>
+  </g>
+
+  <!-- exchange: down = hospital sends w_k and n_k; up (dashed) = server returns w -->
+  <g stroke="#64748b" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M136 330 V416"/><path d="M216 416 V330" stroke-dasharray="5 4"/>
+    <path d="M440 330 V416"/><path d="M520 416 V330" stroke-dasharray="5 4"/>
+    <path d="M744 330 V416"/><path d="M824 416 V330" stroke-dasharray="5 4"/>
+  </g>
+  <g font-size="12.5" fill="#334155" font-style="italic">
+    <text x="144" y="378">w<tspan font-size="9" dy="3">k</tspan><tspan dy="-3">, n</tspan><tspan font-size="9" dy="3">k</tspan></text>
+    <text x="224" y="378">w</text>
+    <text x="448" y="378">w<tspan font-size="9" dy="3">k</tspan><tspan dy="-3">, n</tspan><tspan font-size="9" dy="3">k</tspan></text>
+    <text x="528" y="378">w</text>
+    <text x="752" y="378">w<tspan font-size="9" dy="3">k</tspan><tspan dy="-3">, n</tspan><tspan font-size="9" dy="3">k</tspan></text>
+    <text x="832" y="378">w</text>
+  </g>
+
+  <rect x="40" y="420" width="880" height="78" rx="14" fill="#f8fafc" stroke="#64748b" stroke-width="1.8" filter="url(#shadow)"/>
+  <text x="480" y="446" font-size="15" font-weight="700" fill="#0f172a" text-anchor="middle">FedAvg server:  w = Σ (n<tspan font-size="10" dy="3">k</tspan><tspan dy="-3"> / N) · w</tspan><tspan font-size="10" dy="3">k</tspan></text>
+  <text x="480" y="467" font-size="12" fill="#475569" text-anchor="middle">receives from each hospital only w<tspan font-size="9" dy="3">k</tspan><tspan dy="-3"> (9 weights + 1 intercept) and its patient count n</tspan><tspan font-size="9" dy="3">k</tspan><tspan dy="-3">; sends back the averaged w; 480 bytes per round</tspan></text>
+  <text x="480" y="486" font-size="12" fill="#475569" text-anchor="middle">starts at zero weights · 50 rounds · 1 local update per round · never sees rows, features or labels</text>
+
+  <path d="M610 500 V574" stroke="#64748b" stroke-width="2" marker-end="url(#arrow)"/>
+  <text x="618" y="524" font-size="11.5" fill="#64748b">after round 50</text>
+
+  <!-- ============ 2. prediction ============ -->
+  <rect x="40" y="534" width="880" height="150" rx="14" fill="#ffffff" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="56" y="558" font-size="15" font-weight="700" fill="#0f172a">2  Prediction for each --input case</text>
+  <text x="904" y="558" font-size="12" fill="#475569" text-anchor="end">one record per case → --output</text>
+
+  <g font-size="12" fill="#1f2937" text-anchor="middle">
+    <rect x="56" y="616" width="130" height="28" rx="14" fill="#f1f5f9" stroke="#cbd5e1"/><text x="121" y="634.5">clinical note</text>
+    <rect x="230" y="576" width="130" height="28" rx="14" fill="#fff" stroke="#cbd5e1"/><text x="295" y="594.5">Extract</text>
+    <rect x="384" y="576" width="112" height="28" rx="14" fill="#fff" stroke="#cbd5e1"/><text x="440" y="594.5">9 features</text>
+    <rect x="520" y="576" width="164" height="28" rx="14" fill="#f8fafc" stroke="#64748b" stroke-width="1.5"/><text x="602" y="594.5" font-weight="600">final federated model</text>
+    <rect x="230" y="648" width="130" height="28" rx="14" fill="#fff" stroke="#cbd5e1"/><text x="295" y="666.5">De-identify</text>
+  </g>
+  <g stroke="#94a3b8" stroke-width="1.5" fill="none" marker-end="url(#arrow-small)">
+    <path d="M186 630 C 208 630, 206 590, 228 590"/>
+    <path d="M186 630 C 208 630, 206 662, 228 662"/>
+    <path d="M360 590 H382"/>
+    <path d="M496 590 H518"/>
+    <path d="M684 590 H706"/>
+    <path d="M320 604 V626 H706"/>
+    <path d="M360 662 H706"/>
+  </g>
+
+  <rect x="708" y="574" width="196" height="104" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <g font-size="11.5" fill="#1f2937" font-family="Menlo, Consolas, monospace">
+    <text x="720" y="594">readmission_probability</text>
+    <text x="720" y="630">extracted_clinical_data</text>
+    <text x="720" y="659">pii_entities</text>
+    <text x="720" y="673">deidentified_text</text>
+  </g>
+
+  <!-- ============ 3. extension + reporting ============ -->
+  <rect x="40" y="704" width="560" height="112" rx="14" fill="#faf5ff" stroke="#8b5cf6" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <text x="56" y="728" font-size="14" font-weight="700" fill="#5b21b6">Extension: private FedAvg (src/privacy.py)</text>
+  <text x="584" y="728" font-size="11.5" fill="#6d28d9" text-anchor="end">not used for the submitted predictions</text>
+  <g font-size="11.5" fill="#4c1d95" text-anchor="middle">
+    <rect x="56" y="742" width="126" height="26" rx="13" fill="#fff" stroke="#c4b5fd"/><text x="119" y="759">per-patient gradient</text>
+    <rect x="198" y="742" width="116" height="26" rx="13" fill="#fff" stroke="#c4b5fd"/><text x="256" y="759">clip to C = 0.5</text>
+    <rect x="330" y="742" width="146" height="26" rx="13" fill="#fff" stroke="#c4b5fd"/><text x="403" y="759">sum + noise σC, σ = 8</text>
+    <rect x="492" y="742" width="92" height="26" rx="13" fill="#fff" stroke="#c4b5fd"/><text x="538" y="759">one step</text>
+  </g>
+  <g stroke="#8b5cf6" stroke-width="1.5" marker-end="url(#arrow-purple)">
+    <path d="M182 755 H196"/><path d="M314 755 H328"/><path d="M476 755 H490"/>
+  </g>
+  <text x="56" y="790" font-size="11.5" fill="#5b21b6">inside each hospital, before anything leaves · accountant: T = 50, δ = 10⁻⁵ → ε ≈ 4.6</text>
+  <text x="56" y="806" font-size="11.5" fill="#5b21b6">→ privacy_summary.json, recomputed from --train at every run</text>
+
+  <rect x="620" y="704" width="300" height="112" rx="14" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="636" y="728" font-size="14" font-weight="700" fill="#334155">Reporting</text>
+  <g font-size="11.5" fill="#475569">
+    <text x="636" y="750">src/experiment_summary.py: cross-validation</text>
+    <text x="636" y="766">on --train at every run → experiment_summary.json</text>
+    <text x="636" y="790">scripts/run_experiments.py → results/</text>
+    <text x="636" y="806">(the only code that reads validation labels)</text>
+  </g>
+</svg>
